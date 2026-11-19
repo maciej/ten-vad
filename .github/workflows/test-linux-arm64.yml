@@ -1,6 +1,8 @@
 name: Test Linux ARM64 wheel
 
 on:
+  push:
+    branches: [develop]
   pull_request:
     paths:
       - .github/workflows/test-linux-arm64.yml
@@ -25,5 +27,20 @@ jobs:
           persist-credentials: false
       - name: Build and smoke-test the wheel offline
         run: |
-          docker build -f packaging/Dockerfile --build-arg VERSION=0.0.0 -t ten-vad-arm64 .
+          version="0.0.0.dev${GITHUB_RUN_NUMBER}+g${GITHUB_SHA:0:7}"
+          docker build -f packaging/Dockerfile --build-arg "VERSION=$version" -t ten-vad-arm64 .
           docker run --rm --network none ten-vad-arm64
+      - name: Export the tested wheel
+        if: github.event_name == 'push'
+        run: |
+          container=$(docker create ten-vad-arm64)
+          trap 'docker rm "$container" >/dev/null' EXIT
+          mkdir -p dist
+          docker cp "$container:/wheels/." dist/
+      - name: Upload the wheel
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ten-vad-linux-arm64
+          path: dist/*.whl
+          if-no-files-found: error
